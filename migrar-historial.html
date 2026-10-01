@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Importar historial a Firestore</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 40px auto; padding: 0 20px; color: #16170F; }
+  h1 { font-size: 20px; }
+  p { color: #3C3F31; line-height: 1.5; }
+  button { background: #16170F; color: #fff; border: none; padding: 14px 22px; border-radius: 8px; font-size: 15px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #log { margin-top: 20px; padding: 14px; background: #F0EFE9; border-radius: 8px; font-size: 13px; white-space: pre-wrap; min-height: 40px; }
+  .done { color: #566B45; font-weight: 600; }
+  .err { color: #9C3B3B; }
+</style>
+</head>
+<body>
+  <h1>Importar historial del checklist a Firestore</h1>
+  <p>Esto lee todos los checklists guardados antes en tu Google Sheet y los copia a la base de datos nueva (Firestore). Es seguro usarlo más de una vez — no duplica registros, solo actualiza.</p>
+  <button id="btn">Importar historial</button>
+  <div id="log"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var OLD_API_URL = 'https://script.google.com/macros/s/AKfycbxZBqSS4MnRPHwShjHnNAGXfwgOFgtnQtvBIKhE-2nMkkPWaJUaME_9dk6M84NHxURUZA/exec';
+
+  var firebaseConfig = {
+    apiKey: "AIzaSyAJxgZjvGQFi2GDD1f3zB-y4X6vpJqCfTY",
+    authDomain: "casa-dam.firebaseapp.com",
+    projectId: "casa-dam",
+    storageBucket: "casa-dam.firebasestorage.app",
+    messagingSenderId: "983673231296",
+    appId: "1:983673231296:web:612ab8e54728906b34da25",
+    measurementId: "G-4J616WYLSB"
+  };
+  firebase.initializeApp(firebaseConfig);
+  var db = firebase.firestore();
+
+  var btn = document.getElementById('btn');
+  var log = document.getElementById('log');
+
+  function write(text, cls) {
+    log.innerHTML += (cls ? '<span class="' + cls + '">' + text + '</span>' : text) + '\n';
+    log.scrollTop = log.scrollHeight;
+  }
+
+  btn.addEventListener('click', function () {
+    btn.disabled = true;
+    log.innerHTML = '';
+    write('Leyendo Google Sheet…');
+
+    fetch(OLD_API_URL).then(function (res) {
+      if (!res.ok) throw new Error('No se pudo leer el Sheet (red)');
+      return res.json();
+    }).then(function (data) {
+      var runs = (data && data.runs) ? data.runs : [];
+      if (!runs.length) {
+        write('No se encontró ningún checklist guardado en el Sheet.', 'err');
+        btn.disabled = false;
+        return;
+      }
+      write('Encontrados ' + runs.length + ' checklists. Copiando a Firestore…');
+
+      var i = 0;
+      function next() {
+        if (i >= runs.length) {
+          write('Listo — ' + runs.length + ' checklists importados.', 'done');
+          btn.disabled = false;
+          return;
+        }
+        var r = runs[i];
+        db.collection('runs').doc(r.id).set(r, { merge: true }).then(function () {
+          i++;
+          write('✓ ' + r.id);
+          next();
+        }).catch(function (err) {
+          write('✗ ' + r.id + ' — ' + err.message, 'err');
+          i++;
+          next();
+        });
+      }
+      next();
+    }).catch(function (err) {
+      write('Error leyendo el Sheet: ' + err.message, 'err');
+      btn.disabled = false;
+    });
+  });
+})();
+</script>
+</body>
+</html>
